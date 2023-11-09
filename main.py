@@ -7,17 +7,14 @@ from GAN import GAN
 import imageio
 import keras_core as keras
 import tensorflow as tf
-
+import torch
+from torchvision.utils import save_image
+from torchvision import transforms
+import numpy as np
 
 dataset = keras.utils.image_dataset_from_directory(
     "face_images", image_size=(64, 64), batch_size=32
 )
-
-def process(image, label):
-    image = tf.cast(image/255. ,tf.float32)
-    return image, label
-
-dataset = dataset.map(process)
 
 def plot_dataset(num_samples):
     plt.figure(figsize=(10, 10))
@@ -28,7 +25,13 @@ def plot_dataset(num_samples):
             plt.axis("off")
     plt.show()
 
-#plot_dataset(16)
+plot_dataset(16)
+
+def process(image, label):
+    image = tf.cast(image/255. ,tf.float32)
+    return image, label
+
+dataset = dataset.map(process)
 
 def create_discriminator():
     model = keras.Sequential(name="Discriminator")
@@ -61,14 +64,19 @@ def create_generator():
 
 generator = create_generator()
 discriminator = create_discriminator()
+toPILImage = transforms.ToPILImage()
 
 def plot_generator():
     noise = keras.random.normal(shape=(1, latent_dim))
-    generated_image = generator(noise, training=False)
-    plt.imshow(generated_image[0, :, :, 0])
+    generated_images = generator(noise, training=False)
+    generated_images *= 255
+    generated_image = torch.permute(generated_images[0], (2, 0, 1))
+    generated_image = toPILImage(generated_image)
+    plt.imshow(np.array(generated_image))
+    plt.axis("off")
     plt.show()
 
-#plot_generator()
+plot_generator()
 
 gan = GAN(discriminator=discriminator,
           generator=generator, latent_dim=latent_dim)
@@ -91,11 +99,10 @@ class GANMonitor(keras.callbacks.Callback):
         random_latent_vectors = keras.random.normal(shape=(self.num_img, self.latent_dim))
         generated_images = self.model.generator(random_latent_vectors)
         generated_images *= 255
-        generated_images.numpy()
-        image = keras.utils.array_to_img(generated_images[0])
-        image.save("./generated_images/generated_image_%03d.png" % (epoch))
-        writer.append_data(image)
+        generated_image = torch.permute(generated_images[0], (2, 0, 1))
+        generated_image = toPILImage(generated_image)
+        generated_image.save("./generated_images/generated_image_{}.png".format(epoch))
 
 
-gan.fit(dataset, epochs=1, callbacks=[GANMonitor()])
+gan.fit(dataset, epochs=20, callbacks=[GANMonitor()])
 writer.close()
