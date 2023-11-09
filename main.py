@@ -85,8 +85,8 @@ noise = keras.random.normal(shape=(1, latent_dim), mean=0.0, stddev=0.02)
 
 def plot_generator():
     generated_images = generator(noise, training=False)
+    generated_images *= (generated_images * 127.5) + 127.5
     output = generated_images[0].cpu().detach().numpy()
-    output *= 255
     img = keras.utils.array_to_img(output)
     img.save("./generated_images/generated_image_{}.png".format(0))
 
