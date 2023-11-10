@@ -82,45 +82,63 @@ def generator_loss(fake_output):
 generator_optimizer = keras.optimizers.Adam(lr, beta_1=0.5)
 discriminator_optimizer = keras.optimizers.Adam(lr, beta_1=0.5)
 
-@tf.function
-def train_step(images):
-    noise = tf.random.normal([batch_size, latent_size])
-    with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-        generated_images = generator(noise, training=True)
-        real_output = discriminator(images, training=True)
-        fake_output = discriminator(generated_images, training=True)
+class GAN(keras.Model):
+    def __init__(self):
+        super().__init__()
+        self.d_loss_tracker = keras.metrics.Mean(name="d_loss")
+        self.g_loss_tracker = keras.metrics.Mean(name="g_loss")
 
-        gen_loss = generator_loss(fake_output)
-        disc_loss = discriminator_loss(real_output, fake_output)
+    @property
+    def metrics(self):
+        return [self.d_loss_tracker, self.g_loss_tracker]
 
-    gradients_of_generator = gen_tape.gradient(gen_loss, generator.trainable_variables)
-    gradients_of_discriminator = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
+    @tf.function
+    def train_step(self, images):
+        noise = tf.random.normal([batch_size, latent_size])
+        with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
+            generated_images = generator(noise, training=True)
+            real_output = discriminator(images, training=True)
+            fake_output = discriminator(generated_images, training=True)
 
-    generator_optimizer.apply_gradients(zip(gradients_of_generator, generator.trainable_variables))
-    discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
+            gen_loss = generator_loss(fake_output)
+            disc_loss = discriminator_loss(real_output, fake_output)
 
-data_dir = 'data/train/faces'
+        gradients_of_generator = gen_tape.gradient(gen_loss, generator.trainable_variables)
+        gradients_of_discriminator = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
 
-train_dataset = keras.utils.image_dataset_from_directory(
-    data_dir, 
-    image_size=(image_size, image_size), 
-    batch_size=batch_size, 
-    label_mode=None
-)
-train_dataset = train_dataset.map(lambda x: (x - 127.5) / 127.5)
+        generator_optimizer.apply_gradients(zip(gradients_of_generator, generator.trainable_variables))
+        discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
 
-for epoch in range(epochs):
-    for image_batch in train_dataset:
-        train_step(image_batch)
+        # Update metrics and return their value.
+        self.d_loss_tracker.update_state(disc_loss)
+        self.g_loss_tracker.update_state(gen_loss)
+        return {
+            "d_loss": self.d_loss_tracker.result(),
+            "g_loss": self.g_loss_tracker.result(),
+        }
 
-num_samples = 9
-sample_noise = tf.random.normal([num_samples, latent_size])
-sample_images = generator(sample_noise)
-sample_images = 0.5 * sample_images + 0.5  # Denormalize
-sample_images = np.clip(sample_images, 0, 1)  # Clip values to [0, 1]
+if __name__ == "__main__":
+    data_dir = 'data/train/faces'
+    train_dataset = keras.utils.image_dataset_from_directory(
+        data_dir, 
+        image_size=(image_size, image_size), 
+        batch_size=batch_size, 
+        label_mode=None
+    )
+    train_dataset = train_dataset.map(lambda x: (x - 127.5) / 127.5)
 
-fig, axs = plt.subplots(3, 3, figsize=(8, 8))
-for i in range(num_samples):
-    axs[i // 3, i % 3].imshow(sample_images[i])
-    axs[i // 3, i % 3].axis('off')
-plt.show()
+    gan = GAN()
+    gan.compile()
+    gan.fit(train_dataset, epochs=epochs)
+
+    num_samples = 9
+    sample_noise = tf.random.normal([num_samples, latent_size])
+    sample_images = generator(sample_noise)
+    sample_images = 0.5 * sample_images + 0.5  # Denormalize
+    sample_images = np.clip(sample_images, 0, 1)  # Clip values to [0, 1]
+
+    fig, axs = plt.subplots(3, 3, figsize=(8, 8))
+    for i in range(num_samples):
+        axs[i // 3, i % 3].imshow(sample_images[i])
+        axs[i // 3, i % 3].axis('off')
+    plt.show()
