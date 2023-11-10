@@ -1,17 +1,96 @@
 import os
-os.environ["KERAS_BACKEND"] = "tensorflow"
+os.environ["KERAS_BACKEND"] = "torch"
 import keras_core as keras
 import matplotlib.pyplot as plt
 import time
-from GAN import GAN
 import imageio
 import keras_core as keras
+import torch
+print(torch.cuda.get_device_name(0))
 
-""" import torch
-print(torch.cuda.get_device_name(0)) """
+class GAN(keras.Model):
+    def __init__(self, discriminator, generator, latent_dim):
+        super().__init__()
+        self.discriminator = discriminator
+        self.generator = generator
+        self.latent_dim = latent_dim
+        self.d_loss_tracker = keras.metrics.Mean(name="d_loss")
+        self.g_loss_tracker = keras.metrics.Mean(name="g_loss")
+        self.seed_generator = keras.random.SeedGenerator(1337)
+        self.built = True
 
-import tensorflow as tf
-print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+    @property
+    def metrics(self):
+        return [self.d_loss_tracker, self.g_loss_tracker]
+
+    def compile(self, d_optimizer, g_optimizer, loss_fn):
+        super().compile()
+        self.d_optimizer = d_optimizer
+        self.g_optimizer = g_optimizer
+        self.loss_fn = loss_fn
+
+    def train_step(self, real_images):
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        if isinstance(real_images, tuple):
+            real_images = real_images[0]
+        # Sample random points in the latent space
+        batch_size = real_images.shape[0]
+        random_latent_vectors = keras.random.normal(
+            shape=(batch_size, self.latent_dim), seed=self.seed_generator
+        )
+
+        # Decode them to fake images
+        generated_images = self.generator(random_latent_vectors)
+
+        # Combine them with real images
+        real_images = torch.tensor(real_images, device=device)
+        combined_images = torch.concat([generated_images, real_images], axis=0)
+
+        # Assemble labels discriminating real from fake images
+        labels = torch.concat(
+            [
+                torch.ones((batch_size, 1), device=device),
+                torch.zeros((batch_size, 1), device=device),
+            ],
+            axis=0,
+        )
+        # Add random noise to the labels - important trick!
+        labels += 0.05 * keras.random.uniform(labels.shape, seed=self.seed_generator)
+
+        # Train the discriminator
+        self.zero_grad()
+        predictions = self.discriminator(combined_images)
+        d_loss = self.loss_fn(labels, predictions)
+        d_loss.backward()
+        grads = [v.value.grad for v in self.discriminator.trainable_weights]
+        with torch.no_grad():
+            self.d_optimizer.apply(grads, self.discriminator.trainable_weights)
+
+        # Sample random points in the latent space
+        random_latent_vectors = keras.random.normal(
+            shape=(batch_size, self.latent_dim), seed=self.seed_generator
+        )
+
+        # Assemble labels that say "all real images"
+        misleading_labels = torch.zeros((batch_size, 1), device=device)
+
+        # Train the generator (note that we should *not* update the weights
+        # of the discriminator)!
+        self.zero_grad()
+        predictions = self.discriminator(self.generator(random_latent_vectors))
+        g_loss = self.loss_fn(misleading_labels, predictions)
+        grads = g_loss.backward()
+        grads = [v.value.grad for v in self.generator.trainable_weights]
+        with torch.no_grad():
+            self.g_optimizer.apply(grads, self.generator.trainable_weights)
+
+        # Update metrics and return their value.
+        self.d_loss_tracker.update_state(d_loss)
+        self.g_loss_tracker.update_state(g_loss)
+        return {
+            "d_loss": self.d_loss_tracker.result(),
+            "g_loss": self.g_loss_tracker.result(),
+        }
 
 latent_dim = 300
 def create_generator():
@@ -82,7 +161,7 @@ def plot_dataset(num_samples):
             plt.axis("off")
     plt.show()
 
-plot_dataset(16)
+#plot_dataset(16)
 
 generator = create_generator()
 discriminator = create_discriminator()
@@ -96,8 +175,7 @@ class GANMonitor(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         generated_images = self.model.generator(noise, training=False)
         generated_images = (generated_images * 255) + 255
-        #output = generated_images[0].detach().cpu().numpy().astype("uint8")
-        output = generated_images[0].numpy()
+        output = generated_images[0].detach().cpu().numpy().astype("uint8")
         img = keras.utils.array_to_img(output)
         img.save("./generated_images/generated_image_{}.png".format(epoch))
         writer.append_data(img)
@@ -107,7 +185,7 @@ gan = GAN(discriminator=discriminator,
 gan.compile(
     d_optimizer=keras.optimizers.Adam(learning_rate=0.0001),
     g_optimizer=keras.optimizers.Adam(learning_rate=0.0003),
-    loss_fn=keras.losses.BinaryCrossentropy(),
+    loss_fn=keras.losses.BinaryCrossentropy(from_logits=True),
 )
 gan.fit(dataset_preprocess, epochs=50, callbacks=[GANMonitor()])
 writer.close()
