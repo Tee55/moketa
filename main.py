@@ -24,12 +24,15 @@ def create_generator():
     generator.add(keras.layers.Reshape((8, 8, 512)))
 
     generator.add(keras.layers.Conv2DTranspose(filters=256, kernel_size=4, strides=2, padding="same"))
+    discriminator.add(keras.layers.BatchNormalization())
     generator.add(keras.layers.ReLU())
 
     generator.add(keras.layers.Conv2DTranspose(filters=128, kernel_size=4, strides=2, padding="same"))
+    discriminator.add(keras.layers.BatchNormalization())
     generator.add(keras.layers.ReLU())
 
     generator.add(keras.layers.Conv2DTranspose(filters=64, kernel_size=4, strides=2, padding="same"))
+    discriminator.add(keras.layers.BatchNormalization())
     generator.add(keras.layers.ReLU())
 
     generator.add(keras.layers.Conv2D(filters=3, kernel_size=4, padding="same", activation='sigmoid'))
@@ -43,12 +46,15 @@ def create_discriminator():
     #discriminator.add(keras.layers.Rescaling(1./255))
 
     discriminator.add(keras.layers.Conv2D(filters=64, kernel_size=4, strides=2, padding="same"))
+    discriminator.add(keras.layers.BatchNormalization())
     discriminator.add(keras.layers.LeakyReLU())
 
     discriminator.add(keras.layers.Conv2D(filters=128, kernel_size=4, strides=2, padding="same"))
+    discriminator.add(keras.layers.BatchNormalization())
     discriminator.add(keras.layers.LeakyReLU())
 
     discriminator.add(keras.layers.Conv2D(filters=256, kernel_size=4, strides=2, padding="same"))
+    discriminator.add(keras.layers.BatchNormalization())
     discriminator.add(keras.layers.LeakyReLU())
 
     discriminator.add(keras.layers.Flatten())
@@ -90,7 +96,8 @@ class GANMonitor(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         generated_images = self.model.generator(noise, training=False)
         generated_images = (generated_images * 255) + 255
-        output = generated_images[0].detach().cpu().numpy().astype("uint8")
+        #output = generated_images[0].detach().cpu().numpy().astype("uint8")
+        output = generated_images[0].numpy()
         img = keras.utils.array_to_img(output)
         img.save("./generated_images/generated_image_{}.png".format(epoch))
         writer.append_data(img)
@@ -100,7 +107,7 @@ gan = GAN(discriminator=discriminator,
 gan.compile(
     d_optimizer=keras.optimizers.Adam(learning_rate=0.0001),
     g_optimizer=keras.optimizers.Adam(learning_rate=0.0003),
-    loss_fn=keras.losses.BinaryCrossentropy(from_logits=True),
+    loss_fn=keras.losses.BinaryCrossentropy(),
 )
 gan.fit(dataset_preprocess, epochs=50, callbacks=[GANMonitor()])
 writer.close()
