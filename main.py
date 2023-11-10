@@ -1,57 +1,71 @@
 import os
-os.environ["KERAS_BACKEND"] = "torch"
+os.environ["KERAS_BACKEND"] = "tensorflow"
 import keras_core as keras
 import matplotlib.pyplot as plt
 import time
 from GAN import GAN
 import imageio
 import keras_core as keras
+
+""" import torch
+print(torch.cuda.get_device_name(0)) """
+
 import tensorflow as tf
+print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
-latent_dim = 100
-WEIGHT_INIT = keras.initializers.RandomNormal(mean=0.0, stddev=0.02)
+latent_dim = 300
 def create_generator():
-    model = keras.Sequential(name="Generator")
-    model.add(keras.layers.Dense(8 * 8 * 128, input_shape=(latent_dim, )))
-    model.add(keras.layers.ReLU())
-    model.add(keras.layers.Reshape((8, 8, 128)))
+    generator = keras.Sequential(name="Generator")
 
-    model.add(keras.layers.Conv2DTranspose(filters=256, kernel_size=4, strides=2, padding="same", kernel_initializer=WEIGHT_INIT))
-    model.add(keras.layers.ReLU())
+    generator.add(keras.layers.Input(shape=(latent_dim, )))
 
-    model.add(keras.layers.Conv2DTranspose(filters=128, kernel_size=4, strides=2, padding="same", kernel_initializer=WEIGHT_INIT))
-    model.add(keras.layers.ReLU())
+    generator.add(keras.layers.Dense(8 * 8 * 512))
+    generator.add(keras.layers.ReLU())
+    generator.add(keras.layers.Reshape((8, 8, 512)))
 
-    model.add(keras.layers.Conv2DTranspose(filters=64, kernel_size=4, strides=2, padding="same", kernel_initializer=WEIGHT_INIT))
-    model.add(keras.layers.ReLU())
+    generator.add(keras.layers.Conv2DTranspose(filters=256, kernel_size=4, strides=2, padding="same"))
+    generator.add(keras.layers.ReLU())
 
-    model.add(keras.layers.Conv2D(filters=3, kernel_size=4, padding="same", activation='tanh'))
-    print(model.summary())
-    return model
+    generator.add(keras.layers.Conv2DTranspose(filters=128, kernel_size=4, strides=2, padding="same"))
+    generator.add(keras.layers.ReLU())
+
+    generator.add(keras.layers.Conv2DTranspose(filters=64, kernel_size=4, strides=2, padding="same"))
+    generator.add(keras.layers.ReLU())
+
+    generator.add(keras.layers.Conv2D(filters=3, kernel_size=4, padding="same", activation='sigmoid'))
+    print(generator.summary())
+    return generator
 
 def create_discriminator():
-    model = keras.Sequential(name="Discriminator")
-    model.add(keras.layers.Conv2D(filters=64, kernel_size=4, strides=2, padding="same", input_shape=(64, 64, 3)))
-    model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.LeakyReLU(alpha = 0.2))
+    discriminator = keras.Sequential(name="Discriminator")
 
-    model.add(keras.layers.Conv2D(filters=128, kernel_size=4, strides=2, padding="same"))
-    model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.LeakyReLU(alpha = 0.2))
+    discriminator.add(keras.layers.Input(shape=(64, 64, 3)))
+    #discriminator.add(keras.layers.Rescaling(1./255))
 
-    model.add(keras.layers.Conv2D(filters=128, kernel_size=4, strides=2, padding="same"))
-    model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.LeakyReLU(alpha = 0.2))
+    discriminator.add(keras.layers.Conv2D(filters=64, kernel_size=4, strides=2, padding="same"))
+    discriminator.add(keras.layers.LeakyReLU())
 
-    model.add(keras.layers.Flatten())
-    model.add(keras.layers.Dropout(rate=0.3))
-    model.add(keras.layers.Dense(units=1, activation="sigmoid"))
-    print(model.summary())
-    return model
+    discriminator.add(keras.layers.Conv2D(filters=128, kernel_size=4, strides=2, padding="same"))
+    discriminator.add(keras.layers.LeakyReLU())
+
+    discriminator.add(keras.layers.Conv2D(filters=256, kernel_size=4, strides=2, padding="same"))
+    discriminator.add(keras.layers.LeakyReLU())
+
+    discriminator.add(keras.layers.Flatten())
+    discriminator.add(keras.layers.Dense(units=1, activation="sigmoid"))
+    print(discriminator.summary())
+    return discriminator
 
 dataset = keras.utils.image_dataset_from_directory(
-    "face_images", image_size=(64, 64), batch_size=32, shuffle=True
+    "data/train", image_size=(64, 64), batch_size=32, shuffle=True
 )
+
+scale_layer = keras.layers.Rescaling(1./255)
+def preprocess(images, labels):
+  images = scale_layer(images)
+  return images, labels
+
+dataset_preprocess = dataset.map(preprocess)
 
 def plot_dataset(num_samples):
     plt.figure(figsize=(10, 10))
@@ -63,11 +77,6 @@ def plot_dataset(num_samples):
     plt.show()
 
 plot_dataset(16)
-def process(image, label):
-    image = tf.cast((image - 127.5) / 127.5 , tf.float32)
-    return image, label
-
-dataset = dataset.map(process)
 
 generator = create_generator()
 discriminator = create_discriminator()
@@ -80,8 +89,8 @@ writer = imageio.get_writer(
 class GANMonitor(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         generated_images = self.model.generator(noise, training=False)
-        generated_images = (generated_images * 127.5) + 127.5
-        output = generated_images[0].detach().cpu().numpy()
+        generated_images = (generated_images * 255) + 255
+        output = generated_images[0].detach().cpu().numpy().astype("uint8")
         img = keras.utils.array_to_img(output)
         img.save("./generated_images/generated_image_{}.png".format(epoch))
         writer.append_data(img)
@@ -93,5 +102,5 @@ gan.compile(
     g_optimizer=keras.optimizers.Adam(learning_rate=0.0003),
     loss_fn=keras.losses.BinaryCrossentropy(from_logits=True),
 )
-gan.fit(dataset.take(674), epochs=50, callbacks=[GANMonitor()])
+gan.fit(dataset_preprocess, epochs=50, callbacks=[GANMonitor()])
 writer.close()
