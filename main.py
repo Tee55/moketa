@@ -24,15 +24,15 @@ def create_generator():
     generator.add(keras.layers.Reshape((8, 8, 512)))
 
     generator.add(keras.layers.Conv2DTranspose(filters=256, kernel_size=4, strides=2, padding="same"))
-    discriminator.add(keras.layers.BatchNormalization())
+    generator.add(keras.layers.BatchNormalization())
     generator.add(keras.layers.ReLU())
 
     generator.add(keras.layers.Conv2DTranspose(filters=128, kernel_size=4, strides=2, padding="same"))
-    discriminator.add(keras.layers.BatchNormalization())
+    generator.add(keras.layers.BatchNormalization())
     generator.add(keras.layers.ReLU())
 
     generator.add(keras.layers.Conv2DTranspose(filters=64, kernel_size=4, strides=2, padding="same"))
-    discriminator.add(keras.layers.BatchNormalization())
+    generator.add(keras.layers.BatchNormalization())
     generator.add(keras.layers.ReLU())
 
     generator.add(keras.layers.Conv2D(filters=3, kernel_size=4, padding="same", activation='sigmoid'))
