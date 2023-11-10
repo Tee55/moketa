@@ -9,16 +9,13 @@ from keras_core.optimizers import Adam
 from keras_core.losses import BinaryCrossentropy
 from PIL import Image
 
-img_width, img_height = 256, 256
-batchsize = 32
-
 DIR = 'data/train/faces' #path
 
 # Create an ImageDataGenerator object with data augmentation options for image preprocessing
 train_generator = keras.utils.image_dataset_from_directory(
         DIR, 
         image_size=(64, 64), 
-        batch_size=batchsize, 
+        batch_size=32, 
         label_mode=None
     )
 
