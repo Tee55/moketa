@@ -121,10 +121,9 @@ class GANMonitor(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         sample_noise = tf.random.normal([1, latent_size])
         generated_images = generator(sample_noise)
-        generated_images = 0.5 * generated_images + 0.5 
-        output = generated_images[0].numpy()
-        img = keras.utils.array_to_img(output)
-        img.save("./generated_images/generated_image_{}.png".format(epoch))
+        generated_images = 0.5 * generated_images + 0.5
+        generated_images = np.clip(generated_images, 0, 1)
+        plt.imsave("./generated_images/generated_image_{}.png".format(epoch), generated_images[0])
 
 if __name__ == "__main__":
     data_dir = 'data/train/faces'
