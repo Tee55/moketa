@@ -117,6 +117,15 @@ class GAN(keras.Model):
             "g_loss": self.g_loss_tracker.result(),
         }
 
+class GANMonitor(keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        sample_noise = tf.random.normal([1, latent_size])
+        generated_images = generator(sample_noise)
+        generated_images = 0.5 * generated_images + 0.5 
+        output = generated_images[0].numpy()
+        img = keras.utils.array_to_img(output)
+        img.save("./generated_images/generated_image_{}.png".format(epoch))
+
 if __name__ == "__main__":
     data_dir = 'data/train/faces'
     train_dataset = keras.utils.image_dataset_from_directory(
@@ -129,7 +138,7 @@ if __name__ == "__main__":
 
     gan = GAN()
     gan.compile()
-    gan.fit(train_dataset, epochs=epochs)
+    gan.fit(train_dataset, epochs=epochs, callbacks=[GANMonitor()])
 
     num_samples = 9
     sample_noise = tf.random.normal([num_samples, latent_size])
