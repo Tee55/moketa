@@ -1,5 +1,6 @@
 import os
-os.environ["KERAS_BACKEND"] = "torch"
+os.environ["KERAS_BACKEND"] = "tensorflow"
+import keras_core as keras
 from keras_core.datasets import mnist
 from keras_core.layers import Input, Dense, Reshape, Flatten, Dropout
 from keras_core.layers import BatchNormalization, Activation, ZeroPadding2D
@@ -17,7 +18,7 @@ class DCGAN():
         # Input shape
         self.img_rows = 28
         self.img_cols = 28
-        self.channels = 1
+        self.channels = 3
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
         self.latent_dim = 100
 
@@ -105,12 +106,18 @@ class DCGAN():
 
     def train(self, epochs, batch_size=128, save_interval=50):
 
-        # Load the dataset
-        (X_train, _), (_, _) = mnist.load_data()
+        dir_path = 'data/train/faces'
 
-        # Rescale -1 to 1
+        X_train = []
+        for filename in os.listdir(dir_path):
+            image = keras.utils.load_img(os.path.join(dir_path, filename), target_size=(self.img_cols, self.img_rows))
+            image = keras.utils.img_to_array(image)
+            X_train.append(image)
+
+        X_train = np.array(X_train)
+
+         # Rescale -1 to 1
         X_train = X_train / 127.5 - 1.
-        X_train = np.expand_dims(X_train, axis=3)
 
         # Adversarial ground truths
         valid = np.ones((batch_size, 1))
