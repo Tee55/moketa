@@ -1,17 +1,10 @@
 import os
 os.environ["KERAS_BACKEND"] = "tensorflow"
 import keras_core as keras
-from keras_core.datasets import mnist
-from keras_core.layers import Input, Dense, Reshape, Flatten, Dropout
-from keras_core.layers import BatchNormalization, Activation, ZeroPadding2D
-from keras_core.layers import LeakyReLU
-from keras_core.layers import UpSampling2D, Conv2D
-from keras_core.models import Sequential, Model
 from keras_core.optimizers import Adam
 
 import matplotlib.pyplot as plt
 import numpy as np
-import cv2
 
 
 class DCGAN():
@@ -35,7 +28,7 @@ class DCGAN():
         self.generator = self.build_generator()
 
         # The generator takes noise as input and generates imgs
-        z = Input(shape=(self.latent_dim,))
+        z = keras.layers.Input(shape=(self.latent_dim,))
         img = self.generator(z)
 
         # For the combined model we will only train the generator
@@ -46,7 +39,7 @@ class DCGAN():
 
         # The combined model  (stacked generator and discriminator)
         # Trains the generator to fool the discriminator
-        self.combined = Model(z, valid)
+        self.combined = keras.Model(z, valid)
         self.combined.compile(loss='binary_crossentropy', optimizer=optimizer)
 
     def build_generator(self):
@@ -169,7 +162,8 @@ class DCGAN():
         cnt = 0
         for i in range(r):
             for j in range(c):
-                axs[i, j].imshow(gen_imgs[cnt])
+                img = keras.utils.array_to_img(gen_imgs[cnt])
+                axs[i, j].imshow(img)
                 axs[i, j].axis('off')
                 cnt += 1
         fig.savefig("generated_images/mnist_%d.png" % epoch)
