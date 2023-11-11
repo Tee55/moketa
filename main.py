@@ -57,7 +57,7 @@ class DCGAN():
         generator.add(keras.layers.BatchNormalization())
         generator.add(keras.layers.ReLU())
 
-        generator.add(keras.layers.Conv2D(filters=self.channels, kernel_size=4, padding="same", activation='sigmoid'))
+        generator.add(keras.layers.Conv2D(filters=self.channels, kernel_size=4, padding="same", activation='tanh'))
         print(generator.summary())
 
         return generator
