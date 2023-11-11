@@ -11,16 +11,17 @@ from keras_core.optimizers import Adam
 
 import matplotlib.pyplot as plt
 import numpy as np
+import cv2
 
 
 class DCGAN():
     def __init__(self):
         # Input shape
-        self.img_rows = 28
-        self.img_cols = 28
+        self.img_width = 64
+        self.img_height = 64
         self.channels = 3
-        self.img_shape = (self.img_rows, self.img_cols, self.channels)
-        self.latent_dim = 100
+        self.img_shape = (self.img_width, self.img_height, self.channels)
+        self.latent_dim = 200
 
         optimizer = Adam(0.0002, 0.5)
 
@@ -50,59 +51,55 @@ class DCGAN():
 
     def build_generator(self):
 
-        model = Sequential()
+        generator = keras.Sequential(name="Generator")
 
-        model.add(Dense(128 * 7 * 7, activation="relu",
-                  input_dim=self.latent_dim))
-        model.add(Reshape((7, 7, 128)))
-        model.add(UpSampling2D())
-        model.add(Conv2D(128, kernel_size=3, padding="same"))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(Activation("relu"))
-        model.add(UpSampling2D())
-        model.add(Conv2D(64, kernel_size=3, padding="same"))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(Activation("relu"))
-        model.add(Conv2D(self.channels, kernel_size=3, padding="same"))
-        model.add(Activation("tanh"))
+        generator.add(keras.layers.Input(shape=(self.latent_dim, )))
 
-        model.summary()
+        generator.add(keras.layers.Dense(8 * 8 * 512))
+        generator.add(keras.layers.ReLU())
+        generator.add(keras.layers.Reshape((8, 8, 512)))
 
-        noise = Input(shape=(self.latent_dim,))
-        img = model(noise)
+        generator.add(keras.layers.Conv2DTranspose(filters=256, kernel_size=4, strides=2, padding="same"))
+        generator.add(keras.layers.BatchNormalization())
+        generator.add(keras.layers.ReLU())
 
-        return Model(noise, img)
+        generator.add(keras.layers.Conv2DTranspose(filters=128, kernel_size=4, strides=2, padding="same"))
+        generator.add(keras.layers.BatchNormalization())
+        generator.add(keras.layers.ReLU())
+
+        generator.add(keras.layers.Conv2DTranspose(filters=64, kernel_size=4, strides=2, padding="same"))
+        generator.add(keras.layers.BatchNormalization())
+        generator.add(keras.layers.ReLU())
+
+        generator.add(keras.layers.Conv2D(filters=self.channels, kernel_size=4, padding="same", activation='sigmoid'))
+        print(generator.summary())
+
+        return generator
 
     def build_discriminator(self):
 
-        model = Sequential()
+        discriminator = keras.Sequential(name="Discriminator")
 
-        model.add(Conv2D(32, kernel_size=3, strides=2,
-                  input_shape=self.img_shape, padding="same"))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-        model.add(Conv2D(64, kernel_size=3, strides=2, padding="same"))
-        model.add(ZeroPadding2D(padding=((0, 1), (0, 1))))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-        model.add(Conv2D(128, kernel_size=3, strides=2, padding="same"))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-        model.add(Conv2D(256, kernel_size=3, strides=1, padding="same"))
-        model.add(BatchNormalization(momentum=0.8))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.25))
-        model.add(Flatten())
-        model.add(Dense(1, activation='sigmoid'))
+        discriminator.add(keras.layers.Input(shape=(self.img_width, self.img_height, self.channels)))
+        #discriminator.add(keras.layers.Rescaling(1./255))
 
-        model.summary()
+        discriminator.add(keras.layers.Conv2D(filters=64, kernel_size=4, strides=2, padding="same"))
+        discriminator.add(keras.layers.BatchNormalization())
+        discriminator.add(keras.layers.LeakyReLU())
 
-        img = Input(shape=self.img_shape)
-        validity = model(img)
+        discriminator.add(keras.layers.Conv2D(filters=128, kernel_size=4, strides=2, padding="same"))
+        discriminator.add(keras.layers.BatchNormalization())
+        discriminator.add(keras.layers.LeakyReLU())
 
-        return Model(img, validity)
+        discriminator.add(keras.layers.Conv2D(filters=256, kernel_size=4, strides=2, padding="same"))
+        discriminator.add(keras.layers.BatchNormalization())
+        discriminator.add(keras.layers.LeakyReLU())
+
+        discriminator.add(keras.layers.Flatten())
+        discriminator.add(keras.layers.Dense(units=1, activation="sigmoid"))
+        print(discriminator.summary())
+        
+        return discriminator
 
     def train(self, epochs, batch_size=128, save_interval=50):
 
@@ -110,7 +107,7 @@ class DCGAN():
 
         X_train = []
         for filename in os.listdir(dir_path):
-            image = keras.utils.load_img(os.path.join(dir_path, filename), target_size=(self.img_cols, self.img_rows))
+            image = keras.utils.load_img(os.path.join(dir_path, filename), target_size=(self.img_height, self.img_width))
             image = keras.utils.img_to_array(image)
             X_train.append(image)
 
@@ -164,12 +161,15 @@ class DCGAN():
 
         # Rescale images 0 - 1
         gen_imgs = 0.5 * gen_imgs + 0.5
+        """ for i in range(3):
+            img = keras.utils.array_to_img(gen_imgs[i])
+            img.save("generated_img_%03d_%d.png" % (epoch, i)) """
 
         fig, axs = plt.subplots(r, c)
         cnt = 0
         for i in range(r):
             for j in range(c):
-                axs[i, j].imshow(gen_imgs[cnt, :, :, 0], cmap='gray')
+                axs[i, j].imshow(gen_imgs[cnt])
                 axs[i, j].axis('off')
                 cnt += 1
         fig.savefig("generated_images/mnist_%d.png" % epoch)
