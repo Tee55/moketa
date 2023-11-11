@@ -18,27 +18,20 @@ class DCGAN():
 
         optimizer = Adam(0.0002, 0.5)
 
-        # Build and compile the discriminator
         self.discriminator = self.build_discriminator()
         self.discriminator.compile(loss='binary_crossentropy',
                                    optimizer=optimizer,
                                    metrics=['accuracy'])
-
-        # Build the generator
+        
         self.generator = self.build_generator()
 
-        # The generator takes noise as input and generates imgs
         z = keras.layers.Input(shape=(self.latent_dim,))
         img = self.generator(z)
 
-        # For the combined model we will only train the generator
         self.discriminator.trainable = False
 
-        # The discriminator takes generated images as input and determines validity
         valid = self.discriminator(img)
 
-        # The combined model  (stacked generator and discriminator)
-        # Trains the generator to fool the discriminator
         self.combined = keras.Model(z, valid)
         self.combined.compile(loss='binary_crossentropy', optimizer=optimizer)
 
@@ -74,7 +67,6 @@ class DCGAN():
         discriminator = keras.Sequential(name="Discriminator")
 
         discriminator.add(keras.layers.Input(shape=(self.img_width, self.img_height, self.channels)))
-        #discriminator.add(keras.layers.Rescaling(1./255))
 
         discriminator.add(keras.layers.Conv2D(filters=64, kernel_size=4, strides=2, padding="same"))
         discriminator.add(keras.layers.BatchNormalization())
@@ -105,8 +97,6 @@ class DCGAN():
             X_train.append(image)
 
         X_train = np.array(X_train)
-
-         # Rescale -1 to 1
         X_train = X_train / 127.5 - 1.
 
         # Adversarial ground truths
@@ -114,36 +104,21 @@ class DCGAN():
         fake = np.zeros((batch_size, 1))
 
         for epoch in range(epochs):
-
-            # ---------------------
-            #  Train Discriminator
-            # ---------------------
-
-            # Select a random half of images
             idx = np.random.randint(0, X_train.shape[0], batch_size)
             imgs = X_train[idx]
 
-            # Sample noise and generate a batch of new images
             noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
             gen_imgs = self.generator.predict(noise)
 
-            # Train the discriminator (real classified as ones and generated as zeros)
             d_loss_real = self.discriminator.train_on_batch(imgs, valid)
             d_loss_fake = self.discriminator.train_on_batch(gen_imgs, fake)
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
 
-            # ---------------------
-            #  Train Generator
-            # ---------------------
-
-            # Train the generator (wants discriminator to mistake images as real)
             g_loss = self.combined.train_on_batch(noise, valid)
 
-            # Plot the progress
             print("%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" %
                   (epoch, d_loss[0], 100*d_loss[1], g_loss))
 
-            # If at save interval => save generated image samples
             if epoch % save_interval == 0:
                 self.save_imgs(epoch)
 
@@ -152,7 +127,6 @@ class DCGAN():
         noise = np.random.normal(0, 1, (r * c, self.latent_dim))
         gen_imgs = self.generator.predict(noise)
 
-        # Rescale images 0 - 1
         gen_imgs = 0.5 * gen_imgs + 0.5
         """ for i in range(3):
             img = keras.utils.array_to_img(gen_imgs[i])
